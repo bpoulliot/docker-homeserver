@@ -1,0 +1,267 @@
+version: "3.8"
+
+# More info at https://github.com/pi-hole/docker-pi-hole/ and https://docs.pi-hole.net/
+services:
+  pihole:
+    container_name: pihole
+    image: pihole/pihole:latest
+    network_mode: "host"
+    dns:
+      - 127.0.0.1
+      - 1.1.1.1
+    environment:
+      - "TZ=${TZ}"
+      - "WEBPASSWORD=${WEBPASSWORD}"
+      - "DNS1=1.1.1.1"
+      - "DNS2=1.0.0.1"
+      - "DNSMASQ_LISTENING=all"
+    volumes:
+      - "${USERDIR}/docker/pihole/pihole/:/etc/pihole/"
+      - "${USERDIR}/docker/pihole/dnsmasq.d/:/etc/dnsmasq.d"
+      - "${USERDIR}/docker/pihole/pihole.log:/var/log/pihole.log"
+    cap_add:
+      - NET_ADMIN
+    restart: unless-stopped
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    restart: always
+    network_mode: "host"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - "${USERDIR}/docker/portainer:/data"
+      - "${USERDIR}/docker/shared:/shared"
+    environment:
+      - "TZ=${TZ}"
+  plexms:
+    container_name: plexms
+    restart: unless-stopped
+    image: plexinc/pms-docker:latest
+    network_mode: "host"
+    volumes:
+      - "${USERDIR}/docker/plexms:/config"
+      - "/mnt/plexstor/plex_tmp:/transcode"
+      - "/mnt/plexstor/tv_shows:/tv_shows"
+      - "/mnt/plexstor/movies:/movies"
+      - "${USERDIR}/docker/shared:/shared"
+    environment:
+      - "TZ=${TZ}"
+      - "PLEX_CLAIM=${PLEX_CLAIM}"
+      - "PLEX_UID=${PUID}"
+      - "PLEX_GID=${PGID}"
+      - "ADVERTISE_IP=${PLEXENV}"
+  homeassistant:
+    container_name: home-assistant
+    image: homeassistant/home-assistant:stable
+    volumes:
+      - "${USERDIR}/docker/homeassistant:/config"
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - "TZ=${TZ}"
+      - "PUID=${PUID}"
+      - "PGID=${PGID}"
+    restart: always
+    network_mode: "host"
+  youtube-dl:
+    container_name: youtube-dl
+    restart: unless-stopped
+    image: jeeaaasustest/youtube-dl
+    depends_on:
+      - wireguard-pia
+    network_mode: "service:wireguard-pia"
+    environment:
+      - "PUID=${PUID}"
+      - "PGID=${PGID}"
+      - "TZ=${TZ}"
+      - youtubedl_interval=3h
+      - youtubedl_quality=2160
+    volumes:
+      - "${USERDIR}/docker/youtube-dl:/config"
+      - "/mnt/plexstor/tv_shows:/downloads"
+  transmission:
+    image: ghcr.io/linuxserver/transmission
+    container_name: transmission
+    depends_on:
+      - wireguard-pia
+    network_mode: "service:wireguard-pia"
+    environment:
+      - "PUID=${PUID}"
+      - "PGID=${PGID}"
+      - "TZ=${TZ}"
+      - TRANSMISSION_WEB_HOME=/combustion-release/ #optional
+    volumes:
+      - "${USERDIR}/docker/transmission:/config"
+      - /mnt/plexstor/storage/transmission:/downloads
+      - /mnt/plexstor/storage/watch:/watch
+    restart: unless-stopped
+  sonarr:
+    image: ghcr.io/linuxserver/sonarr
+    container_name: sonarr
+    depends_on:
+      - wireguard-pia
+    network_mode: "service:wireguard-pia"
+    environment:
+      - "PUID=${PUID}"
+      - "PGID=${PGID}"
+      - "TZ=${TZ}"    
+    volumes:
+      - "${USERDIR}/docker/sonarr:/config"
+      - "/mnt/plexstor/tv_shows:/tv"
+      - /mnt/plexstor/storage/transmission:/downloads
+    restart: unless-stopped
+  radarr:
+    image: ghcr.io/linuxserver/radarr
+    container_name: radarr
+    depends_on:
+      - wireguard-pia
+    network_mode: "service:wireguard-pia"
+    environment:
+      - "PUID=${PUID}"
+      - "PGID=${PGID}"
+      - "TZ=${TZ}"
+    volumes:
+      - "${USERDIR}/docker/radarr:/config"                                                                                                                                         
+      - "/mnt/plexstor/movies:/movies"
+      - /mnt/plexstor/storage/transmission:/downloads
+    restart: unless-stopped
+  jackett:
+    image: ghcr.io/linuxserver/jackett
+    container_name: jackett
+    depends_on:
+      - wireguard-pia
+    network_mode: "service:wireguard-pia"
+    environment:
+      - "PUID=${PUID}"
+      - "PGID=${PGID}"
+      - "TZ=${TZ}"
+      - AUTO_UPDATE=true #optional
+      #- RUN_OPTS=<run options here> #optional
+    volumes:
+      - "${USERDIR}/docker/jackett:/config"
+      - /mnt/plexstor/storage/watch:/downloads
+    restart: unless-stopped
+  wireguard-pia:
+    image: thrnz/docker-wireguard-pia:latest
+    container_name: wireguard-pia
+    depends_on:
+      - pihole
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    environment:
+      - "LOC=${PIA_LOC}"
+      - "USER=${PIA_USER}"
+      - "PASS=${PIA_PASS}"
+      - "LOCAL_NETWORK=${LOCAL_NET}"
+    ports:
+      - "${SERVER_IP}:9117:9117" # jackett
+      - "${SERVER_IP}:9091:9091/tcp" # transmission
+      - "${SERVER_IP}:51413:51413/tcp" # transmission
+      - "${SERVER_IP}:51413:51413/udp" # transmission
+      - "${SERVER_IP}:20202:8989/tcp" # sonarr
+      - "${SERVER_IP}:5299:5299/tcp" # lazylibrarian
+      - "${SERVER_IP}:30303:7878/tcp" # radarr
+      - "${SERVER_IP}:3579:3579/tcp" # ombi
+      - "${SERVER_IP}:25252:8080" # calibre
+      - "${SERVER_IP}:15151:8081" # calibre
+    volumes:
+      - "${USERDIR}/docker/wireguard-pia:/pia"
+      - "${USERDIR}/docker/shared:/pia-shared"
+    sysctls:
+      # wg-quick fails to set this without --privileged, so set it here instead if needed
+      - net.ipv4.conf.all.src_valid_mark=1
+      # May as well disable ipv6. Should be blocked anyway.
+      - net.ipv6.conf.default.disable_ipv6=1
+      - net.ipv6.conf.all.disable_ipv6=1
+      - net.ipv6.conf.lo.disable_ipv6=1
+    # The container has no recovery logic. Use a healthcheck to catch disconnects.
+    healthcheck:
+      test: ping -c 1 www.google.com || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
+  ombi:
+    image: ghcr.io/linuxserver/ombi
+    container_name: ombi
+    # !RESTRICT This sets ombi to run through VPN
+    network_mode: "service:wireguard-pia"
+    depends_on:
+      - pihole
+      - wireguard-pia
+    # !UNLOCK This sets ombi to run local only
+    #ports:
+    #  - 3579:3579
+    environment:
+      - "PUID=${PUID}"
+      - "PGID=${PGID}"
+      - "TZ=${TZ}"
+      #- BASE_URL=/ombi #optional
+    volumes:
+      - "${USERDIR}/docker/ombi:/config"
+    restart: unless-stopped
+  ll-calibre:                                                                                                              
+    image: thraxis/lazylibrarian-calibre                                                                                   
+    container_name: ll-calibre                                                                                             
+    depends_on:                                                                                                            
+      - wireguard-pia                                                                                                      
+    network_mode: "service:wireguard-pia"                                                                                  
+    environment:                                                                                                           
+      - "PUID=${PUID}"
+      - "PGID=${PGID}"
+      - "TZ=${TZ}"
+    volumes:                                                                                                               
+      - "${USERDIR}/docker/ll-calibre:/config"                                                                             
+      - /mnt/plexstor/storage/transmission:/downloads                                                                      
+      - /mnt/plexstor/books/ebooks:/books                                                                                  
+      - /mnt/plexstor/books/audiobooks:/audiobooks                                                                         
+    restart: unless-stopped
+
+
+###############################################################################
+############################## IN DEVELOPMENT #################################
+###############################################################################
+
+  calibre:
+    image: linuxserver/calibre:v4.23.0-ls78
+    container_name: calibre
+    network_mode: "service:wireguard-pia"
+    environment:
+      - "PUID=${PUID}"
+      - "PGID=${PGID}"
+      - "TZ=${TZ}"
+      - CLI_ARGS= #optional
+      - "GUAC_USER=${GUAC_USER}"
+      - "GUAC_PASS=${GUAC_PASS}"
+    volumes:
+      - "${USERDIR}/docker/calibre:/config"
+      - /mnt/plexstor/books:/books
+      - /mnt/plexstor/storage/transmission/complete:/import
+    restart: unless-stopped
+
+###############################################################################
+############################## OUT OF SERVICE #################################
+###############################################################################
+
+# Removed in favor of wireguard setup -- keep for 60 days (2020-11-13)
+#  pia-vpn:
+#    image: qmcgaw/private-internet-access
+#    container_name: pia-vpn
+#    cap_add:
+#      - NET_ADMIN
+#    network_mode: bridge
+#    depends_on:
+#      - pihole
+#    ports:
+#      - [REMOVED]
+#    volumes:
+#      - "${USERDIR}/docker/pia-vpn:/gluetun"
+#    environment:
+#      - OPENVPN_IPV6=off
+#      - VPNSP=private internet access
+#      - "TZ=${TZ}"
+#      - "USER=${PIA_USER}"
+#      - "PASSWORD=${PIA_PASS}"
+#      - REGION=${PIA_LOC}
+#      - "UID=${PUID}"
+#      - "GID=${PGID}"
+#      - FIREWALL_OUTBOUND_SUBNETS=${LOCAL_NET}
