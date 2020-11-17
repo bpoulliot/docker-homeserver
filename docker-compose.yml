@@ -180,25 +180,6 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-  ombi:
-    image: ghcr.io/linuxserver/ombi
-    container_name: ombi
-    # !RESTRICT This sets ombi to run through VPN
-    network_mode: "service:wireguard-pia"
-    depends_on:
-      - pihole
-      - wireguard-pia
-    # !UNLOCK This sets ombi to run local only
-    #ports:
-    #  - 3579:3579
-    environment:
-      - "PUID=${PUID}"
-      - "PGID=${PGID}"
-      - "TZ=${TZ}"
-      #- BASE_URL=/ombi #optional
-    volumes:
-      - "${USERDIR}/docker/ombi:/config"
-    restart: unless-stopped
   ll-calibre:                                                                                                              
     image: thraxis/lazylibrarian-calibre                                                                                   
     container_name: ll-calibre                                                                                             
@@ -236,6 +217,26 @@ services:
       - "${USERDIR}/docker/calibre:/config"
       - /mnt/plexstor/books:/books
       - /mnt/plexstor/storage/transmission/complete:/import
+    restart: unless-stopped
+
+  ombi:
+    image: ghcr.io/linuxserver/ombi
+    container_name: ombi
+    # !RESTRICT This sets ombi to run through VPN
+    network_mode: "service:wireguard-pia"
+    depends_on:
+      - pihole
+      - wireguard-pia
+    # !UNLOCK This sets ombi to run local only
+    #ports:
+    #  - 3579:3579
+    environment:
+      - "PUID=${PUID}"
+      - "PGID=${PGID}"
+      - "TZ=${TZ}"
+      #- BASE_URL=/ombi #optional
+    volumes:
+      - "${USERDIR}/docker/ombi:/config"
     restart: unless-stopped
 
 ###############################################################################
