@@ -1,0 +1,71 @@
+
+# Configure a default setup of Home Assistant (frontend, api, etc)
+default_config:
+
+# Text to speech
+tts:
+  - platform: google_translate
+
+group: !include groups.yaml
+automation: !include automations.yaml
+script: !include scripts.yaml
+scene: !include scenes.yaml
+
+#http:
+  #base_url: https://bitmap-hass.duckdns.org
+  #ssl_certificate: /ssl/fullchain.pem
+  #ssl_key: /ssl/privkey.pem
+
+#duckdns:
+  #domain: bitmap-hass
+  #access_token: 207e00e4-4a02-4370-939c-6fd30fc7faed
+
+google:
+  client_id: !secret google_id
+  client_secret: !secret google_secret
+
+withings:
+  client_id: !secret withings_id
+  client_secret: !secret withings_secret
+  
+sensor:
+  - platform: fitbit
+    clock_format: 12H
+    monitored_resources:
+      - "activities/tracker/steps"
+      - "activities/heart"
+      - "devices/battery"
+      - "sleep/awakeningsCount"
+      - "sleep/efficiency"
+      - "sleep/minutesAfterWakeup"
+      - "sleep/minutesAsleep"
+      - "sleep/minutesAwake"
+      - "sleep/minutesToFallAsleep"
+      - "sleep/startTime"
+      - "sleep/timeInBed"
+  - platform: netgear_enhanced
+    host: !secret netgear_ip
+    username: !secret netgear_user
+    password: !secret netgear_pass
+    resources:
+      - firmware
+      - check_app_fw
+      - get_device_config_info
+      - get_lan_config_info
+      - get_wan_ip_info
+      - info
+      - supported_features
+      - bw_control
+      - 2g_wifi_info
+      - 5g_wifi_info
+      - get_channel
+      - get_smart_conn
+
+spotify:
+  client_id: !secret spotify_id
+  client_secret: !secret spotify_secret
+
+device_tracker:
+  - platform: netgear
+    password: !secret netgear_pass
+    host: !secret netgear_ip

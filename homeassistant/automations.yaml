@@ -1,0 +1,65 @@
+- id: '1604994548077'
+  alias: turn on front porch light at sundown
+  description: ''
+  trigger:
+  - platform: sun
+    event: sunset
+  condition: []
+  action:
+  - domain: light
+    entity_id: light.front_porch
+    device_id: da53843812e05bd7698f9cbb475db39d
+    type: turn_on
+    brightness_pct: 100
+  mode: single
+- id: '1604994638499'
+  alias: turn off front porch light at sunrise
+  description: ''
+  trigger:
+  - platform: sun
+    event: sunrise
+  condition: []
+  action:
+  - type: turn_off
+    device_id: da53843812e05bd7698f9cbb475db39d
+    entity_id: light.front_porch
+    domain: light
+  mode: single
+- id: '1605086324261'
+  alias: blink office light at 9:30 PM
+  description: ''
+  trigger:
+  - platform: time
+    at: '21:30'
+  condition: []
+  action:
+  - type: flash
+    device_id: aad9b18f774246a6d4032b4777ecc055
+    entity_id: light.office
+    domain: light
+  - delay: 00:00:01
+  - type: flash
+    device_id: aad9b18f774246a6d4032b4777ecc055
+    entity_id: light.office
+    domain: light
+  - delay: 00:00:01
+  - type: flash
+    device_id: aad9b18f774246a6d4032b4777ecc055
+    entity_id: light.office
+    domain: light
+  - delay: 00:00:01
+  - type: flash
+    device_id: aad9b18f774246a6d4032b4777ecc055
+    entity_id: light.office
+    domain: light
+  - delay: 00:00:01
+  - type: flash
+    device_id: aad9b18f774246a6d4032b4777ecc055
+    entity_id: light.office
+    domain: light
+  - delay: 00:00:30
+  - type: turn_off
+    device_id: aad9b18f774246a6d4032b4777ecc055
+    entity_id: light.office
+    domain: light
+  mode: single
