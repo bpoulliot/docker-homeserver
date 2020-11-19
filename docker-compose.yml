@@ -1,7 +1,11 @@
 version: "3.8"
 
-# More info at https://github.com/pi-hole/docker-pi-hole/ and https://docs.pi-hole.net/
 services:
+
+###############################################################################
+################################ PRODUCTION  ##################################
+###############################################################################
+
   pihole:
     container_name: pihole
     image: pihole/pihole:latest
@@ -40,9 +44,9 @@ services:
     network_mode: "host"
     volumes:
       - "${USERDIR}/docker/plexms:/config"
-      - "/mnt/plexstor/plex_tmp:/transcode"
-      - "/mnt/plexstor/tv_shows:/tv_shows"
-      - "/mnt/plexstor/movies:/movies"
+      - "${STORAGE}/plex_tmp:/transcode"
+      - "${STORAGE}/tv_shows:/tv_shows"
+      - "${STORAGE}/movies:/movies"
       - "${USERDIR}/docker/shared:/shared"
     environment:
       - "TZ=${TZ}"
@@ -62,22 +66,6 @@ services:
       - "PGID=${PGID}"
     restart: always
     network_mode: "host"
-  youtube-dl:
-    container_name: youtube-dl
-    restart: unless-stopped
-    image: jeeaaasustest/youtube-dl
-    depends_on:
-      - wireguard-pia
-    network_mode: "service:wireguard-pia"
-    environment:
-      - "PUID=${PUID}"
-      - "PGID=${PGID}"
-      - "TZ=${TZ}"
-      - youtubedl_interval=3h
-      - youtubedl_quality=2160
-    volumes:
-      - "${USERDIR}/docker/youtube-dl:/config"
-      - "/mnt/plexstor/tv_shows:/downloads"
   transmission:
     image: ghcr.io/linuxserver/transmission
     container_name: transmission
@@ -91,8 +79,8 @@ services:
       - TRANSMISSION_WEB_HOME=/combustion-release/ #optional
     volumes:
       - "${USERDIR}/docker/transmission:/config"
-      - /mnt/plexstor/storage/transmission:/downloads
-      - /mnt/plexstor/storage/watch:/watch
+      - "${STORAGE}/storage/transmission:/downloads"
+      - "${STORAGE}/storage/watch:/watch"
     restart: unless-stopped
   sonarr:
     image: ghcr.io/linuxserver/sonarr
@@ -106,8 +94,8 @@ services:
       - "TZ=${TZ}"    
     volumes:
       - "${USERDIR}/docker/sonarr:/config"
-      - "/mnt/plexstor/tv_shows:/tv"
-      - /mnt/plexstor/storage/transmission:/downloads
+      - "${STORAGE}/tv_shows:/tv"
+      - "${STORAGE}/storage/transmission:/downloads"
     restart: unless-stopped
   radarr:
     image: ghcr.io/linuxserver/radarr
@@ -120,9 +108,9 @@ services:
       - "PGID=${PGID}"
       - "TZ=${TZ}"
     volumes:
-      - "${USERDIR}/docker/radarr:/config"                                                                                                                                         
-      - "/mnt/plexstor/movies:/movies"
-      - /mnt/plexstor/storage/transmission:/downloads
+      - "${USERDIR}/docker/radarr:/config"                                                                                                                            
+      - "${STORAGE}/movies:/movies"
+      - "${STORAGE}/storage/transmission:/downloads"
     restart: unless-stopped
   jackett:
     image: ghcr.io/linuxserver/jackett
@@ -138,7 +126,7 @@ services:
       #- RUN_OPTS=<run options here> #optional
     volumes:
       - "${USERDIR}/docker/jackett:/config"
-      - /mnt/plexstor/storage/watch:/downloads
+      - "${STORAGE}/storage/watch:/downloads"
     restart: unless-stopped
   wireguard-pia:
     image: thrnz/docker-wireguard-pia:latest
@@ -180,43 +168,47 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-  ll-calibre:                                                                                                              
-    image: thraxis/lazylibrarian-calibre                                                                                   
-    container_name: ll-calibre                                                                                             
-    depends_on:                                                                                                            
-      - wireguard-pia                                                                                                      
-    network_mode: "service:wireguard-pia"                                                                                  
-    environment:                                                                                                           
-      - "PUID=${PUID}"
-      - "PGID=${PGID}"
-      - "TZ=${TZ}"
-    volumes:                                                                                                               
-      - "${USERDIR}/docker/ll-calibre:/config"                                                                             
-      - /mnt/plexstor/storage/transmission:/downloads                                                                      
-      - /mnt/plexstor/books/ebooks:/books                                                                                  
-      - /mnt/plexstor/books/audiobooks:/audiobooks                                                                         
-    restart: unless-stopped
-
+    restart: on-failure
 
 ###############################################################################
 ############################## IN DEVELOPMENT #################################
 ###############################################################################
 
-  calibre:
-    image: linuxserver/calibre:v4.23.0-ls78
-    container_name: calibre
+  # !TODO set only playlist to watch later? selectively include vids
+  youtube-dl:
+    container_name: youtube-dl
+    restart: unless-stopped
+    image: jeeaaasustest/youtube-dl
+    depends_on:
+      - wireguard-pia
     network_mode: "service:wireguard-pia"
     environment:
       - "PUID=${PUID}"
       - "PGID=${PGID}"
       - "TZ=${TZ}"
-      - CLI_ARGS= #optional
-      - "GUAC_USER=${GUAC_USER}"
-      - "GUAC_PASS=${GUAC_PASS}"
+      - youtubedl_interval=3h
+      - youtubedl_quality=2160
     volumes:
-      - "${USERDIR}/docker/calibre:/config"
-      - /mnt/plexstor/books:/books
-      - /mnt/plexstor/storage/transmission/complete:/import
+      - "${USERDIR}/docker/youtube-dl:/config"
+      - "${STORAGE}/tv_shows:/downloads"
+
+  ll-calibre:
+    image: thraxis/lazylibrarian-calibre
+    container_name: ll-calibre
+    depends_on:
+      - wireguard-pia
+    network_mode: "service:wireguard-pia"
+    environment:
+      - "PUID=${PUID}"
+      - "PGID=${PGID}"
+      - "TZ=${TZ}"
+    # issues with books and audiobooks being picked up -- add bs-air?
+    volumes:
+      - "${USERDIR}/docker/ll-calibre:/config"
+      - "${STORAGE}/storage/transmission/complete:/downloads"
+      #- "${STORAGE}/books/downloads:/downloads"
+      - "${STORAGE}/books/ebooks:/books"
+      - "${STORAGE}/books/audiobooks:/audiobooks"
     restart: unless-stopped
 
   ombi:
