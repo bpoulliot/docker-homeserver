@@ -7,9 +7,12 @@ services:
 ###############################################################################
 
   pihole:
-    container_name: pihole
     image: pihole/pihole:latest
+    container_name: pihole
     network_mode: "host"
+    restart: always
+    cap_add:
+      - NET_ADMIN
     dns:
       - 127.0.0.1
       - 1.1.1.1
@@ -23,71 +26,73 @@ services:
       - "${USERDIR}/docker/pihole/pihole/:/etc/pihole/"
       - "${USERDIR}/docker/pihole/dnsmasq.d/:/etc/dnsmasq.d"
       - "${USERDIR}/docker/pihole/pihole.log:/var/log/pihole.log"
-    cap_add:
-      - NET_ADMIN
-    restart: unless-stopped
   portainer:
     image: portainer/portainer-ce:latest
     container_name: portainer
-    restart: always
     network_mode: "host"
+    restart: always
+    environment:
+      - "TZ=${TZ}"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - "${USERDIR}/docker/portainer:/data"
       - "${USERDIR}/docker/shared:/shared"
-    environment:
-      - "TZ=${TZ}"
   plexms:
-    container_name: plexms
-    restart: unless-stopped
     image: plexinc/pms-docker:latest
+    container_name: plexms
     network_mode: "host"
-    volumes:
-      - "${USERDIR}/docker/plexms:/config"
-      - "${STORAGE}/plex_tmp:/transcode"
-      - "${STORAGE}/tv_shows:/tv_shows"
-      - "${STORAGE}/movies:/movies"
-      - "${USERDIR}/docker/shared:/shared"
+    restart: unless-stopped
     environment:
       - "TZ=${TZ}"
       - "PLEX_CLAIM=${PLEX_CLAIM}"
       - "PLEX_UID=${PUID}"
       - "PLEX_GID=${PGID}"
       - "ADVERTISE_IP=${PLEXENV}"
+    volumes:
+      - "${USERDIR}/docker/plexms:/config"
+      - "${STORAGE}/plex_tmp:/transcode"
+      - "${STORAGE}/tv_shows:/tv_shows"
+      - "${STORAGE}/movies:/movies"
+      - "${USERDIR}/docker/shared:/shared"
   homeassistant:
-    container_name: home-assistant
     image: homeassistant/home-assistant:stable
+    container_name: home-assistant
+    network_mode: "host"
+    restart: unless-stopped
+    environment:
+      - "TZ=${TZ}"
+      - "PUID=${PUID}"
+      - "PGID=${PGID}"
     volumes:
       - "${USERDIR}/docker/homeassistant:/config"
       - /etc/localtime:/etc/localtime:ro
-    environment:
-      - "TZ=${TZ}"
-      - "PUID=${PUID}"
-      - "PGID=${PGID}"
-    restart: always
-    network_mode: "host"
   transmission:
-    image: ghcr.io/linuxserver/transmission
+    image: ghcr.io/linuxserver/transmission:latest
     container_name: transmission
+    network_mode: "service:wireguard-pia"
+    restart: unless-stopped
     depends_on:
       - wireguard-pia
-    network_mode: "service:wireguard-pia"
     environment:
       - "PUID=${PUID}"
       - "PGID=${PGID}"
       - "TZ=${TZ}"
-      - TRANSMISSION_WEB_HOME=/combustion-release/ #optional
+      - "USER=${TRNS_USER}"
+      - "PASS=${TRNS_PASS}"
+      - TRANSMISSION_WEB_HOME=/transmission-web-control/ #optional
+      - TRANSMISSION_WATCH_DIR_FORCE_GENERIC=true
     volumes:
       - "${USERDIR}/docker/transmission:/config"
       - "${STORAGE}/storage/transmission:/downloads"
-      - "${STORAGE}/storage/watch:/watch"
-    restart: unless-stopped
+      - "${STORAGE}/storage/transmission/watch:/watch"
   sonarr:
-    image: ghcr.io/linuxserver/sonarr
+    image: ghcr.io/linuxserver/sonarr:latest
     container_name: sonarr
+    network_mode: "service:wireguard-pia"
+    restart: unless-stopped
     depends_on:
       - wireguard-pia
-    network_mode: "service:wireguard-pia"
+    restart: unless-stopped
     environment:
       - "PUID=${PUID}"
       - "PGID=${PGID}"
@@ -96,28 +101,28 @@ services:
       - "${USERDIR}/docker/sonarr:/config"
       - "${STORAGE}/tv_shows:/tv"
       - "${STORAGE}/storage/transmission:/downloads"
-    restart: unless-stopped
   radarr:
-    image: ghcr.io/linuxserver/radarr
+    image: ghcr.io/linuxserver/radarr:latest
     container_name: radarr
+    network_mode: "service:wireguard-pia"
+    restart: unless-stopped
     depends_on:
       - wireguard-pia
-    network_mode: "service:wireguard-pia"
     environment:
       - "PUID=${PUID}"
       - "PGID=${PGID}"
       - "TZ=${TZ}"
     volumes:
-      - "${USERDIR}/docker/radarr:/config"                                                                                                                            
+      - "${USERDIR}/docker/radarr:/config"
       - "${STORAGE}/movies:/movies"
       - "${STORAGE}/storage/transmission:/downloads"
-    restart: unless-stopped
   jackett:
-    image: ghcr.io/linuxserver/jackett
+    image: ghcr.io/linuxserver/jackett:latest
     container_name: jackett
+    network_mode: "service:wireguard-pia"
+    restart: unless-stopped
     depends_on:
       - wireguard-pia
-    network_mode: "service:wireguard-pia"
     environment:
       - "PUID=${PUID}"
       - "PGID=${PGID}"
@@ -126,35 +131,16 @@ services:
       #- RUN_OPTS=<run options here> #optional
     volumes:
       - "${USERDIR}/docker/jackett:/config"
-      - "${STORAGE}/storage/watch:/downloads"
-    restart: unless-stopped
+      - "${STORAGE}/storage/transmission/watch:/downloads"
   wireguard-pia:
     image: thrnz/docker-wireguard-pia:latest
     container_name: wireguard-pia
+    restart: always
     depends_on:
       - pihole
     cap_add:
       - NET_ADMIN
       - SYS_MODULE
-    environment:
-      - "LOC=${PIA_LOC}"
-      - "USER=${PIA_USER}"
-      - "PASS=${PIA_PASS}"
-      - "LOCAL_NETWORK=${LOCAL_NET}"
-    ports:
-      - "${SERVER_IP}:9117:9117" # jackett
-      - "${SERVER_IP}:9091:9091/tcp" # transmission
-      - "${SERVER_IP}:51413:51413/tcp" # transmission
-      - "${SERVER_IP}:51413:51413/udp" # transmission
-      - "${SERVER_IP}:20202:8989/tcp" # sonarr
-      - "${SERVER_IP}:5299:5299/tcp" # lazylibrarian
-      - "${SERVER_IP}:30303:7878/tcp" # radarr
-      - "${SERVER_IP}:3579:3579/tcp" # ombi
-      - "${SERVER_IP}:25252:8080" # calibre
-      - "${SERVER_IP}:15151:8081" # calibre
-    volumes:
-      - "${USERDIR}/docker/wireguard-pia:/pia"
-      - "${USERDIR}/docker/shared:/pia-shared"
     sysctls:
       # wg-quick fails to set this without --privileged, so set it here instead if needed
       - net.ipv4.conf.all.src_valid_mark=1
@@ -168,7 +154,24 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-    restart: on-failure
+    environment:
+      - "LOC=${PIA_LOC}"
+      - "USER=${PIA_USER}"
+      - "PASS=${PIA_PASS}"
+      - "LOCAL_NETWORK=${LOCAL_NET}"
+    volumes:
+      - "${USERDIR}/docker/wireguard-pia:/pia"
+      - "${USERDIR}/docker/shared:/pia-shared"
+    ports:
+      - "${SERVER_IP}:9117:9117" # jackett
+      - "${SERVER_IP}:9091:9091/tcp" # transmission
+      - "${SERVER_IP}:51413:51413/tcp" # transmission
+      - "${SERVER_IP}:51413:51413/udp" # transmission
+      - "${SERVER_IP}:20202:8989/tcp" # sonarr
+      - "${SERVER_IP}:5299:5299/tcp" # lazylibrarian
+      - "${SERVER_IP}:30303:7878/tcp" # radarr
+      - "${SERVER_IP}:3579:3579/tcp" # ombi
+      - "${SERVER_IP}:4040:4040" # booksonic-air
 
 ###############################################################################
 ############################## IN DEVELOPMENT #################################
@@ -176,12 +179,12 @@ services:
 
   # !TODO set only playlist to watch later? selectively include vids
   youtube-dl:
+    image: jeeaaasustest/youtube-dl:latest
     container_name: youtube-dl
+    network_mode: "service:wireguard-pia"
     restart: unless-stopped
-    image: jeeaaasustest/youtube-dl
     depends_on:
       - wireguard-pia
-    network_mode: "service:wireguard-pia"
     environment:
       - "PUID=${PUID}"
       - "PGID=${PGID}"
@@ -192,44 +195,108 @@ services:
       - "${USERDIR}/docker/youtube-dl:/config"
       - "${STORAGE}/tv_shows:/downloads"
 
-  ll-calibre:
-    image: thraxis/lazylibrarian-calibre
-    container_name: ll-calibre
-    depends_on:
-      - wireguard-pia
+  lazylibrarian:
+    image: ghcr.io/linuxserver/lazylibrarian
+    container_name: lazylibrarian
     network_mode: "service:wireguard-pia"
+    restart: unless-stopped
+    depends_on:
+      - pihole
+      - wireguard-pia
     environment:
       - "PUID=${PUID}"
       - "PGID=${PGID}"
       - "TZ=${TZ}"
-    # issues with books and audiobooks being picked up -- add bs-air?
+      - DOCKER_MODS=linuxserver/calibre-web:calibre|linuxserver/mods:lazylibrarian-ffmpeg #optional
     volumes:
-      - "${USERDIR}/docker/ll-calibre:/config"
+      - "${USERDIR}/docker/lazylibrarian:/config"
       - "${STORAGE}/storage/transmission/complete:/downloads"
-      #- "${STORAGE}/books/downloads:/downloads"
       - "${STORAGE}/books/ebooks:/books"
       - "${STORAGE}/books/audiobooks:/audiobooks"
-    restart: unless-stopped
+      - "${STORAGE}/books/import:/import"
 
   ombi:
-    image: ghcr.io/linuxserver/ombi
+    image: ghcr.io/linuxserver/ombi:latest
     container_name: ombi
-    # !RESTRICT This sets ombi to run through VPN
+    # !VPN This sets ombi to run through VPN
     network_mode: "service:wireguard-pia"
+    restart: unless-stopped
     depends_on:
       - pihole
       - wireguard-pia
-    # !UNLOCK This sets ombi to run local only
+    # !OPEN This sets ombi to run local only
     #ports:
     #  - 3579:3579
     environment:
       - "PUID=${PUID}"
       - "PGID=${PGID}"
       - "TZ=${TZ}"
+      # for reverse proxy
       #- BASE_URL=/ombi #optional
     volumes:
       - "${USERDIR}/docker/ombi:/config"
+
+  calibre-web:
+    image: ghcr.io/linuxserver/calibre-web:latest
+    container_name: calibre-web
     restart: unless-stopped
+    ports:
+      - 8083:8083
+    environment:
+      - "PUID=${PUID}"
+      - "PGID=${PGID}"
+      - "TZ=${TZ}"
+      - DOCKER_MODS=linuxserver/calibre-web:calibre
+    volumes:
+      - "${USERDIR}/docker/shared/calibre:/config"
+      - "${STORAGE}/books/ebooks:/books"
+
+  calibre:
+    image: linuxserver/calibre:v4.23.0-ls78
+    container_name: calibre
+    restart: unless-stopped
+    ports:
+      - 8080:8080
+      - 8081:8081
+    environment:
+      - "PUID=${PUID}"
+      - "PGID=${PGID}"
+      - "TZ=${TZ}"
+      - "GUAC_USER=${GUAC_USER}" #optional
+      - "GUAC_PASS=${GUAC_PASS}" #optional
+      #- CLI_ARGS= #optional
+    volumes:
+      - "${USERDIR}/docker/shared/calibre:/config"
+      - "${STORAGE}/books/ebooks:/books"
+
+  booksonic-air:
+    image: ghcr.io/linuxserver/booksonic-air:latest
+    container_name: booksonic-air
+    network_mode: "service:wireguard-pia"
+    restart: unless-stopped
+    environment:
+      - "PUID=${PUID}"
+      - "PGID=${PGID}"
+      - "TZ=${TZ}" 
+      # for reverse proxy
+      #- CONTEXT_PATH=url-base
+    volumes:
+      - "${USERDIR}/docker/booksonic-air:/config"
+      - "${STORAGE}/books/audiobooks:/audiobooks"
+
+  duckdns:
+    image: ghcr.io/linuxserver/duckdns:latest
+    container_name: duckdns
+    restart: unless-stopped
+    environment:
+      - "PUID=${PUID}"
+      - "PGID=${PGID}"
+      - "TZ=${TZ}" 
+      - "SUBDOMAINS=${DDNS_DOMAIN}"
+      - "TOKEN=${DDNS_TOKEN}"
+      - LOG_FILE=true #optional - needs /config if true
+    volumes:
+      - "${USERDIR}/docker/duckdns:/config"
 
 ###############################################################################
 ############################## OUT OF SERVICE #################################
