@@ -6,6 +6,9 @@ services:
 ################################ PRODUCTION  ##################################
 ###############################################################################
 
+################################# NETWORK #####################################
+
+  # DNS-level ad + tracking blocker
   pihole:
     image: pihole/pihole:latest
     container_name: pihole
@@ -26,112 +29,8 @@ services:
       - "${USERDIR}/docker/pihole/pihole/:/etc/pihole/"
       - "${USERDIR}/docker/pihole/dnsmasq.d/:/etc/dnsmasq.d"
       - "${USERDIR}/docker/pihole/pihole.log:/var/log/pihole.log"
-  portainer:
-    image: portainer/portainer-ce:latest
-    container_name: portainer
-    network_mode: "host"
-    restart: always
-    environment:
-      - "TZ=${TZ}"
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - "${USERDIR}/docker/portainer:/data"
-      - "${USERDIR}/docker/shared:/shared"
-  plexms:
-    image: plexinc/pms-docker:latest
-    container_name: plexms
-    network_mode: "host"
-    restart: unless-stopped
-    environment:
-      - "TZ=${TZ}"
-      - "PLEX_CLAIM=${PLEX_CLAIM}"
-      - "PLEX_UID=${PUID}"
-      - "PLEX_GID=${PGID}"
-      - "ADVERTISE_IP=${PLEXENV}"
-    volumes:
-      - "${USERDIR}/docker/plexms:/config"
-      - "${STORAGE}/plex_tmp:/transcode"
-      - "${STORAGE}/tv_shows:/tv_shows"
-      - "${STORAGE}/movies:/movies"
-      - "${USERDIR}/docker/shared:/shared"
-  homeassistant:
-    image: homeassistant/home-assistant:stable
-    container_name: home-assistant
-    network_mode: "host"
-    restart: unless-stopped
-    environment:
-      - "TZ=${TZ}"
-      - "PUID=${PUID}"
-      - "PGID=${PGID}"
-    volumes:
-      - "${USERDIR}/docker/homeassistant:/config"
-      - /etc/localtime:/etc/localtime:ro
-  transmission:
-    image: ghcr.io/linuxserver/transmission:latest
-    container_name: transmission
-    network_mode: "service:wireguard-pia"
-    restart: unless-stopped
-    depends_on:
-      - wireguard-pia
-    environment:
-      - "PUID=${PUID}"
-      - "PGID=${PGID}"
-      - "TZ=${TZ}"
-      - "USER=${TRNS_USER}"
-      - "PASS=${TRNS_PASS}"
-      - TRANSMISSION_WEB_HOME=/transmission-web-control/ #optional
-      - TRANSMISSION_WATCH_DIR_FORCE_GENERIC=true
-    volumes:
-      - "${USERDIR}/docker/transmission:/config"
-      - "${STORAGE}/storage/transmission:/downloads"
-      - "${STORAGE}/storage/transmission/watch:/watch"
-  sonarr:
-    image: ghcr.io/linuxserver/sonarr:latest
-    container_name: sonarr
-    network_mode: "service:wireguard-pia"
-    restart: unless-stopped
-    depends_on:
-      - wireguard-pia
-    restart: unless-stopped
-    environment:
-      - "PUID=${PUID}"
-      - "PGID=${PGID}"
-      - "TZ=${TZ}"    
-    volumes:
-      - "${USERDIR}/docker/sonarr:/config"
-      - "${STORAGE}/tv_shows:/tv"
-      - "${STORAGE}/storage/transmission:/downloads"
-  radarr:
-    image: ghcr.io/linuxserver/radarr:latest
-    container_name: radarr
-    network_mode: "service:wireguard-pia"
-    restart: unless-stopped
-    depends_on:
-      - wireguard-pia
-    environment:
-      - "PUID=${PUID}"
-      - "PGID=${PGID}"
-      - "TZ=${TZ}"
-    volumes:
-      - "${USERDIR}/docker/radarr:/config"
-      - "${STORAGE}/movies:/movies"
-      - "${STORAGE}/storage/transmission:/downloads"
-  jackett:
-    image: ghcr.io/linuxserver/jackett:latest
-    container_name: jackett
-    network_mode: "service:wireguard-pia"
-    restart: unless-stopped
-    depends_on:
-      - wireguard-pia
-    environment:
-      - "PUID=${PUID}"
-      - "PGID=${PGID}"
-      - "TZ=${TZ}"
-      - AUTO_UPDATE=true #optional
-      #- RUN_OPTS=<run options here> #optional
-    volumes:
-      - "${USERDIR}/docker/jackett:/config"
-      - "${STORAGE}/storage/transmission/watch:/downloads"
+
+  # VPN using wireguard protocol and Private Internet Access provider
   wireguard-pia:
     image: thrnz/docker-wireguard-pia:latest
     container_name: wireguard-pia
@@ -171,16 +70,43 @@ services:
       - "${SERVER_IP}:5299:5299/tcp" # lazylibrarian
       - "${SERVER_IP}:30303:7878/tcp" # radarr
       - "${SERVER_IP}:3579:3579/tcp" # ombi
-      - "${SERVER_IP}:4040:4040" # booksonic-air
 
-###############################################################################
-############################## IN DEVELOPMENT #################################
-###############################################################################
+################################ MANAGEMENT ####################################
 
-  # !TODO set only playlist to watch later? selectively include vids
-  youtube-dl:
-    image: jeeaaasustest/youtube-dl:latest
-    container_name: youtube-dl
+  # easy container and stack management + monitoring
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    network_mode: "host"
+    restart: always
+    environment:
+      - "TZ=${TZ}"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - "${USERDIR}/docker/portainer:/data"
+      - "${USERDIR}/docker/shared:/shared"
+
+  # portal similar to commercial app locker (mobile-friendly!)
+  heimdall:
+    image: ghcr.io/linuxserver/heimdall:latest
+    container_name: heimdall
+    restart: unless-stopped
+    environment:
+      - "PUID=${PUID}"
+      - "PGID=${PGID}"
+      - "TZ=${TZ}"
+    volumes:
+      - "${USERDIR}/docker/heimdall:/config"
+    ports:
+      - 303:80 # HTTP
+      #- 720:443 # HTTPS -- unnecessary for now
+
+################################# TORRENTS ####################################
+
+  # torrent client -- currently has issues with magnet links in watch folder
+  transmission:
+    image: ghcr.io/linuxserver/transmission:latest
+    container_name: transmission
     network_mode: "service:wireguard-pia"
     restart: unless-stopped
     depends_on:
@@ -189,12 +115,90 @@ services:
       - "PUID=${PUID}"
       - "PGID=${PGID}"
       - "TZ=${TZ}"
-      - youtubedl_interval=3h
-      - youtubedl_quality=2160
+      - "USER=${TRNS_USER}"
+      - "PASS=${TRNS_PASS}"
+      - TRANSMISSION_WEB_HOME=/transmission-web-control/ #optional
+      - TRANSMISSION_WATCH_DIR_FORCE_GENERIC=true
     volumes:
-      - "${USERDIR}/docker/youtube-dl:/config"
-      - "${STORAGE}/tv_shows:/downloads"
+      - "${USERDIR}/docker/transmission:/config"
+      - "${STORAGE}/storage/transmission:/downloads"
+      - "${USERDIR}/docker/shared/torrents:/watch"
 
+  # torrent indexer -- can use [address]/torznab/all for full list
+  jackett:
+    image: ghcr.io/linuxserver/jackett:latest
+    container_name: jackett
+    network_mode: "service:wireguard-pia"
+    restart: unless-stopped
+    depends_on:
+      - wireguard-pia
+    environment:
+      - "PUID=${PUID}"
+      - "PGID=${PGID}"
+      - "TZ=${TZ}"
+      - AUTO_UPDATE=true #optional
+      #- RUN_OPTS=<run options here> #optional
+    volumes:
+      - "${USERDIR}/docker/jackett:/config"
+      - "${USERDIR}/docker/shared/torrents:/downloads"
+
+################################# MEDIA #######################################
+
+  # media server for multiple devices -- considering swap to Jellyfin (on Roku!)
+  plexms:
+    image: plexinc/pms-docker:latest
+    container_name: plexms
+    network_mode: "host"
+    restart: unless-stopped
+    environment:
+      - "TZ=${TZ}"
+      - "PLEX_CLAIM=${PLEX_CLAIM}"
+      - "PLEX_UID=${PUID}"
+      - "PLEX_GID=${PGID}"
+      - "ADVERTISE_IP=${PLEXENV}"
+    volumes:
+      - "${USERDIR}/docker/plexms:/config"
+      - "${STORAGE}/plex_tmp:/transcode"
+      - "${STORAGE}/tv_shows:/tv_shows"
+      - "${STORAGE}/movies:/movies"
+      - "${USERDIR}/docker/shared:/shared"
+
+  # tv show media management, integrates with Jackett + Transmission + Plex
+  sonarr:
+    image: ghcr.io/linuxserver/sonarr:latest
+    container_name: sonarr
+    network_mode: "service:wireguard-pia"
+    restart: unless-stopped
+    depends_on:
+      - wireguard-pia
+    restart: unless-stopped
+    environment:
+      - "PUID=${PUID}"
+      - "PGID=${PGID}"
+      - "TZ=${TZ}"
+    volumes:
+      - "${USERDIR}/docker/sonarr:/config"
+      - "${STORAGE}/tv_shows:/tv"
+      - "${STORAGE}/storage/transmission:/downloads"
+
+  # movie media management, integrates with Jackett + Transmission + Plex
+  radarr:
+    image: ghcr.io/linuxserver/radarr:latest
+    container_name: radarr
+    network_mode: "service:wireguard-pia"
+    restart: unless-stopped
+    depends_on:
+      - wireguard-pia
+    environment:
+      - "PUID=${PUID}"
+      - "PGID=${PGID}"
+      - "TZ=${TZ}"
+    volumes:
+      - "${USERDIR}/docker/radarr:/config"
+      - "${STORAGE}/movies:/movies"
+      - "${STORAGE}/storage/transmission:/downloads"
+
+  # ebook and audiobook manager/storefront -- extremely picky w/ metadata (ID3)
   lazylibrarian:
     image: ghcr.io/linuxserver/lazylibrarian
     container_name: lazylibrarian
@@ -215,18 +219,35 @@ services:
       - "${STORAGE}/books/audiobooks:/audiobooks"
       - "${STORAGE}/books/import:/import"
 
+############################### SMART HOME #####################################
+
+  # home automation, monitoring, and functional dashboard creator
+  homeassistant:
+    image: homeassistant/home-assistant:stable
+    container_name: home-assistant
+    network_mode: "host"
+    restart: unless-stopped
+    environment:
+      - "TZ=${TZ}"
+      - "PUID=${PUID}"
+      - "PGID=${PGID}"
+    volumes:
+      - "${USERDIR}/docker/homeassistant:/config"
+      - /etc/localtime:/etc/localtime:ro
+
+###############################################################################
+############################## IN DEVELOPMENT #################################
+###############################################################################
+
+  # media request application for Sonarr, Radarr, Plex, etc...
   ombi:
     image: ghcr.io/linuxserver/ombi:latest
     container_name: ombi
-    # !VPN This sets ombi to run through VPN
     network_mode: "service:wireguard-pia"
     restart: unless-stopped
     depends_on:
       - pihole
       - wireguard-pia
-    # !OPEN This sets ombi to run local only
-    #ports:
-    #  - 3579:3579
     environment:
       - "PUID=${PUID}"
       - "PGID=${PGID}"
@@ -236,6 +257,7 @@ services:
     volumes:
       - "${USERDIR}/docker/ombi:/config"
 
+  # pretty web interface for Calibre -- is this needed?
   calibre-web:
     image: ghcr.io/linuxserver/calibre-web:latest
     container_name: calibre-web
@@ -251,6 +273,7 @@ services:
       - "${USERDIR}/docker/shared/calibre:/config"
       - "${STORAGE}/books/ebooks:/books"
 
+  # Guacamole running Calibre -- useful for ebooks, integrates w/ LazyLibrarian
   calibre:
     image: linuxserver/calibre:v4.23.0-ls78
     container_name: calibre
@@ -269,21 +292,7 @@ services:
       - "${USERDIR}/docker/shared/calibre:/config"
       - "${STORAGE}/books/ebooks:/books"
 
-  booksonic-air:
-    image: ghcr.io/linuxserver/booksonic-air:latest
-    container_name: booksonic-air
-    network_mode: "service:wireguard-pia"
-    restart: unless-stopped
-    environment:
-      - "PUID=${PUID}"
-      - "PGID=${PGID}"
-      - "TZ=${TZ}" 
-      # for reverse proxy
-      #- CONTEXT_PATH=url-base
-    volumes:
-      - "${USERDIR}/docker/booksonic-air:/config"
-      - "${STORAGE}/books/audiobooks:/audiobooks"
-
+  # working on getting a domain that actually redirects here...
   duckdns:
     image: ghcr.io/linuxserver/duckdns:latest
     container_name: duckdns
@@ -291,37 +300,9 @@ services:
     environment:
       - "PUID=${PUID}"
       - "PGID=${PGID}"
-      - "TZ=${TZ}" 
+      - "TZ=${TZ}"
       - "SUBDOMAINS=${DDNS_DOMAIN}"
       - "TOKEN=${DDNS_TOKEN}"
       - LOG_FILE=true #optional - needs /config if true
     volumes:
       - "${USERDIR}/docker/duckdns:/config"
-
-###############################################################################
-############################## OUT OF SERVICE #################################
-###############################################################################
-
-# Removed in favor of wireguard setup -- keep for 60 days (2020-11-13)
-#  pia-vpn:
-#    image: qmcgaw/private-internet-access
-#    container_name: pia-vpn
-#    cap_add:
-#      - NET_ADMIN
-#    network_mode: bridge
-#    depends_on:
-#      - pihole
-#    ports:
-#      - [REMOVED]
-#    volumes:
-#      - "${USERDIR}/docker/pia-vpn:/gluetun"
-#    environment:
-#      - OPENVPN_IPV6=off
-#      - VPNSP=private internet access
-#      - "TZ=${TZ}"
-#      - "USER=${PIA_USER}"
-#      - "PASSWORD=${PIA_PASS}"
-#      - REGION=${PIA_LOC}
-#      - "UID=${PUID}"
-#      - "GID=${PGID}"
-#      - FIREWALL_OUTBOUND_SUBNETS=${LOCAL_NET}
