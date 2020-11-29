@@ -58,18 +58,21 @@ services:
       - "USER=${PIA_USER}"
       - "PASS=${PIA_PASS}"
       - "LOCAL_NETWORK=${LOCAL_NET}"
+      - PORT_FORWARDING=1
+      - PORT_PERSIST=1
     volumes:
       - "${USERDIR}/docker/wireguard-pia:/pia"
       - "${USERDIR}/docker/shared:/pia-shared"
     ports:
       - "${SERVER_IP}:9117:9117" # jackett
       - "${SERVER_IP}:9091:9091/tcp" # transmission
-      - "${SERVER_IP}:51413:51413/tcp" # transmission
-      - "${SERVER_IP}:51413:51413/udp" # transmission
+      - "${TRNS_PORT}:51413/tcp" # torrents
+      - "${TRNS_PORT}:51413/udp" # torrents
       - "${SERVER_IP}:20202:8989/tcp" # sonarr
       - "${SERVER_IP}:5299:5299/tcp" # lazylibrarian
       - "${SERVER_IP}:30303:7878/tcp" # radarr
       - "${SERVER_IP}:3579:3579/tcp" # ombi
+      - "${SERVER_IP}:5800:5800/tcp" # firefox
 
 ################################ MANAGEMENT ####################################
 
@@ -110,6 +113,7 @@ services:
     network_mode: "service:wireguard-pia"
     restart: unless-stopped
     depends_on:
+      - pihole
       - wireguard-pia
     environment:
       - "PUID=${PUID}"
@@ -131,6 +135,7 @@ services:
     network_mode: "service:wireguard-pia"
     restart: unless-stopped
     depends_on:
+      - pihole
       - wireguard-pia
     environment:
       - "PUID=${PUID}"
@@ -143,6 +148,24 @@ services:
       - "${USERDIR}/docker/shared/torrents:/downloads"
 
 ################################# MEDIA #######################################
+
+# media request application for Sonarr, Radarr, Plex, etc...
+  ombi:
+    image: ghcr.io/linuxserver/ombi:latest
+    container_name: ombi
+    network_mode: "service:wireguard-pia"
+    restart: unless-stopped
+    depends_on:
+      - pihole
+      - wireguard-pia
+    environment:
+      - "PUID=${PUID}"
+      - "PGID=${PGID}"
+      - "TZ=${TZ}"
+      # for reverse proxy
+      #- BASE_URL=/ombi #optional
+    volumes:
+      - "${USERDIR}/docker/ombi:/config"
 
   # media server for multiple devices -- considering swap to Jellyfin (on Roku!)
   plexms:
@@ -170,6 +193,7 @@ services:
     network_mode: "service:wireguard-pia"
     restart: unless-stopped
     depends_on:
+      - pihole
       - wireguard-pia
     restart: unless-stopped
     environment:
@@ -188,6 +212,7 @@ services:
     network_mode: "service:wireguard-pia"
     restart: unless-stopped
     depends_on:
+      - pihole
       - wireguard-pia
     environment:
       - "PUID=${PUID}"
@@ -219,6 +244,52 @@ services:
       - "${STORAGE}/books/audiobooks:/audiobooks"
       - "${STORAGE}/books/import:/import"
 
+############################## MEDIA BACKUP ####################################
+
+  makemkv:
+    image: jlesage/makemkv
+    container_name: makemkv
+    build: .
+#    ports:
+#      - "${SERVER_IP}:50505:5800"
+    environment:
+      - "USER_ID=${PUID}"
+      - "GROUP_ID=${PGID}"
+      - "TZ=${TZ}"
+      - AUTO_DISC_RIPPER=1
+      - AUTO_DISC_RIPPER_EJECT=1
+    volumes:
+      - "${USERDIR}/docker/makemkv:/config:rw"
+      - "${STORAGE}/storage/makemkv:/storage:ro"
+      - "${STORAGE}/storage/makemkv/output:/output:rw"
+    devices:
+      - /dev/sr0:/dev/sr0
+      - /dev/sg1:/dev/sg1
+
+  handbrake:
+    image: jlesage/handbrake
+    container_name: handbrake
+    restart: unless-stopped
+    build: .
+#    ports:
+#      - "${SERVER_IP}:40404:5800/tcp"
+    environment:
+      - "USER_ID=${PUID}"                                                                                                    
+      - "GROUP_ID=${PGID}"                                                                                                   
+      - "TZ=${TZ}"                                                                                                           
+      - AUTOMATED_CONVERSION_PRESET=Devices/roku-bluray                                                                      
+      - AUTOMATED_CONVERSION_FORMAT=mp4                                                                                      
+      - AUTOMATED_CONVERSION_KEEP_SOURCE=0                                                                                   
+      - AUTOMATED_CONVERSION_OUTPUT_DIR=/output                                                                              
+      - AUTOMATED_CONVERSION_SOURCE_STABLE_TIME=30                                                                           
+      - AUTOMATED_CONVERSION_CHECK_INTERVAL=60                                                                               
+      - AUTOMATED_CONVERSION_NO_GUI_PROGRESS=1                                                                               
+      - AUTOMATED_CONVERSION_OUTPUT_SUBDIR=SAME_AS_SRC                                                                       
+    volumes:                                                                                                                 
+      - "${USERDIR}/docker/handbrake:/config:rw"                                                                             
+      - "${STORAGE}/storage/makemkv/output:/watch:rw"                                                                        
+      - "${STORAGE}/storage/unsorted:/output:rw"
+
 ############################### SMART HOME #####################################
 
   # home automation, monitoring, and functional dashboard creator
@@ -238,24 +309,6 @@ services:
 ###############################################################################
 ############################## IN DEVELOPMENT #################################
 ###############################################################################
-
-  # media request application for Sonarr, Radarr, Plex, etc...
-  ombi:
-    image: ghcr.io/linuxserver/ombi:latest
-    container_name: ombi
-    network_mode: "service:wireguard-pia"
-    restart: unless-stopped
-    depends_on:
-      - pihole
-      - wireguard-pia
-    environment:
-      - "PUID=${PUID}"
-      - "PGID=${PGID}"
-      - "TZ=${TZ}"
-      # for reverse proxy
-      #- BASE_URL=/ombi #optional
-    volumes:
-      - "${USERDIR}/docker/ombi:/config"
 
   # pretty web interface for Calibre -- is this needed?
   calibre-web:
@@ -292,17 +345,73 @@ services:
       - "${USERDIR}/docker/shared/calibre:/config"
       - "${STORAGE}/books/ebooks:/books"
 
-  # working on getting a domain that actually redirects here...
-  duckdns:
-    image: ghcr.io/linuxserver/duckdns:latest
-    container_name: duckdns
+  firefox:
+    image: jlesage/firefox
+    container_name: firefox
+    network_mode: "service:wireguard-pia"
     restart: unless-stopped
+    shm_size: '2gb' # shared memory size to avoid crashes
+    security_opt: 
+      - seccomp="${USERDIR}/docker/firefox/default.json"
+    depends_on:
+      - pihole
+      - wireguard-pia
     environment:
-      - "PUID=${PUID}"
-      - "PGID=${PGID}"
+      - "USER_ID=${PUID}"
+      - "GROUP_ID=${PGID}"
       - "TZ=${TZ}"
-      - "SUBDOMAINS=${DDNS_DOMAIN}"
-      - "TOKEN=${DDNS_TOKEN}"
-      - LOG_FILE=true #optional - needs /config if true
+      #- SECURE_CONNECTION=1
+      - DISPLAY_WIDTH=1920
+      - DISPLAY_HEIGHT=1080
     volumes:
-      - "${USERDIR}/docker/duckdns:/config"
+      - "${USERDIR}/docker/firefox:/config:rw"
+      - "${USERDIR}/docker/shared/torrents:/downloads"
+
+#  swag:
+#    image: linuxserver/swag
+#    container_name: swag
+#    restart: unless-stopped
+#    cap_add: 
+#      - NET_ADMIN
+#    environment:
+#      - "PUID=${PUID}"
+#      - "PGID=${PGID}"
+#      - "TZ=${TZ}"
+#      - "URL=${DOMAIN}"
+#      - SUBDOMAINS=wildcard,
+#      - VALIDATION=dns
+#      - DNSPLUGIN=googledomains
+#      - "EMAIL=${EMAIL}"
+#      - DHLEVEL=4096
+#    ports:
+#      - "${SERVER_IP}:443:443"
+#      - "${SERVER_IP}:80:80" # for HTTP only, trying to force HTTPS
+#    volumes:
+#      - "${USERDIR}/docker/swag:/config"
+#    restart: unless-stopped
+
+#  ddclient:
+#    image: ghcr.io/linuxserver/ddclient
+#    container_name: ddclient
+#    environment:
+#      - "PUID=${PUID}"
+#      - "PGID=${PGID}"
+#      - "TZ=${TZ}"
+#      - "URL=${DOMAIN}"
+#    volumes:
+#      - "${USERDIR}/docker/ddclient:/config"
+#    restart: unless-stopped
+
+  glances:
+    image: nicolargo/glances:latest
+    container_name: glances
+    network_mode: host
+    restart: always
+    pid: "host"
+    environment:
+      - GLANCES_OPT=-w
+    ports:
+      - 61208:61208
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
